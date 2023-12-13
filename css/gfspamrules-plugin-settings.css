@@ -1,0 +1,16 @@
+.gform-settings-choice--visual label {
+    padding: 1.625rem 1.5rem 0.75rem !important;
+    min-width: 8.75rem;
+    margin-right: 1rem;
+}
+.gform-settings-choice--visual img, .gform-settings-choice--visual svg {
+    height: auto !important;
+    width: 100% !important;
+}
+
+/* conditional fields, hidden by default */
+#gform_setting_content_blacklist_add,
+#gform_setting_email_blacklist_add,
+#gform_setting_name_blacklist_add {
+    display: none;
+}
