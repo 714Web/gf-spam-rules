@@ -110,6 +110,17 @@ class GFSpamRules extends GFAddOn {
 				)
 			),
 			array(
+				'handle'  => 'gfspamrules-plugin-page',
+				'src'     => $this->get_base_url() . '/css/gfspamrules-plugin-page.css',
+				'version' => $this->_version,
+				'enqueue' => array(
+					array(
+						'admin_page' => array( 'plugin_page' ),
+						'tab'        => 'gfspamrules'
+					)
+				)
+			),
+			array(
 				'handle'  => 'bootstrap',
 				'src'     => $this->get_base_url() . '/css/bootstrap.min.css',
 				'version' => '5.3.1',
@@ -151,28 +162,8 @@ class GFSpamRules extends GFAddOn {
 	public function plugin_page() {
 		$results = $this->get_all_form_spam_entries();
 		?>
-		<style>
-			body {
-				background-color: #f0f0f1;
-				font-family: -apple-system, system-ui, "Segoe UI", "Helvetica Neue", sans-serif;
-				font-size: 13px !important;
-			}
-			.container {
-				max-width: 100%;
-			}
-			#universal-message-container {
-				background: #fff;
-				border: 1px solid #e3e6ef;
-				border-radius: 3px;
-				box-shadow: 0 1px 4px rgba(18,25,97,.078);
-				box-sizing: border-box;
-			}
-			#universal-message-container sup {
-				color: red;
-			}
-		</style>
-		<div class="wrap">
-			<p><a href="<?php echo admin_url('admin.php?page=gf_settings&subview=gfspamrules'); ?>">Edit Settings</a></p>
+		<div class="wrap px-0">
+			<p><a href="<?php echo urlencode( admin_url( 'admin.php?page=gf_settings&subview=' . $this->_slug ) ); ?>">Edit Settings</a></p>
 
 			<div id="universal-message-container">
 				<div class="container">
