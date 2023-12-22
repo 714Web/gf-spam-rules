@@ -110,6 +110,17 @@ class GFSpamRules extends GFAddOn {
 				)
 			),
 			array(
+				'handle'  => 'gfspamrules-plugin-page',
+				'src'     => $this->get_base_url() . '/css/gfspamrules-plugin-page.css',
+				'version' => $this->_version,
+				'enqueue' => array(
+					array(
+						'admin_page' => array( 'plugin_page' ),
+						'tab'        => 'gfspamrules'
+					)
+				)
+			),
+			array(
 				'handle'  => 'bootstrap',
 				'src'     => $this->get_base_url() . '/css/bootstrap.min.css',
 				'version' => '5.3.1',
@@ -130,14 +141,21 @@ class GFSpamRules extends GFAddOn {
 
 	public function get_all_form_spam_entries() {
 		$search_criteria = array();
+		$search_criteria['status'] = "spam";
 		$form_id = 0;
-		$start_date = date( 'Y-m-d', strtotime('-30 days') );
-		$end_date = date( 'Y-m-d', time() );
-		$search_criteria['start_date'] = $start_date;
-		$search_criteria['end_date'] = $end_date;
-		$search_criteria['status'] = 'spam';
+		$page_size = 20;
+		$current_page = max( 1, $_REQUEST['pagenum'] );
+		$offset   = ($current_page - 1) * $page_size;
+		$sorting = array();
+		$paging = array( 'offset' => $offset, 'page_size' => $page_size ); 
+		$total_count = 0;
+		$results = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
+		$total_pages = ceil( $total_count / $page_size ); 
 
-		$results = GFAPI::get_entries($form_id, $search_criteria);
+		// pass-through data
+		$results['current_page'] = $current_page;
+		$results['total_count'] = $total_count;
+		$results['total_pages'] = $total_pages;
 		
 		return $results;
 	}
@@ -150,48 +168,65 @@ class GFSpamRules extends GFAddOn {
 	 */
 	public function plugin_page() {
 		$results = $this->get_all_form_spam_entries();
-		?>
-		<style>
-			body {
-				background-color: #f0f0f1;
-				font-family: -apple-system, system-ui, "Segoe UI", "Helvetica Neue", sans-serif;
-				font-size: 13px !important;
-			}
-			.container {
-				max-width: 100%;
-			}
-			#universal-message-container {
-				background: #fff;
-				border: 1px solid #e3e6ef;
-				border-radius: 3px;
-				box-shadow: 0 1px 4px rgba(18,25,97,.078);
-				box-sizing: border-box;
-			}
-			#universal-message-container sup {
-				color: red;
-			}
-		</style>
-		<div class="wrap">
-			<p><a href="<?php echo admin_url('admin.php?page=gf_settings&subview=gfspamrules'); ?>">Edit Settings</a></p>
 
-			<div id="universal-message-container">
-				<div class="container">
-					<div class="row">
-						<div class="col">
-							<p class="my-4 lead"><strong><?php echo count($results); ?> spam entries from all forms in the last 30 days</strong></p>
+		// Build pagination
+		$pagination_links = '';
+		if ( $results['total_pages'] > 1 ) {
+			$pagination_links   = '<nav aria-label="Pagination">';
+			$pagination_links  .= paginate_links([
+						'base'      => @add_query_arg('pagenum','%#%'),
+						'format'    => '&pagenum=%#%',
+						'current'   => $results['current_page'],
+						'total'     => $results['total_pages'],
+						'prev_next' => true,
+						'prev_text' => '&laquo;',
+						'next_text' => '&raquo;',
+						'type' 		=> 'list',
+					]);
+			$pagination_links .= '</nav>';
+		}
+		// convert to bootstrap pagination
+		$pagination_links = str_replace("<ul class='page-numbers'>", '<ul class="pagination pagination-sm mb-0 justify-content-end">', $pagination_links);
+		$pagination_links = str_replace('page-numbers', 'page-link', $pagination_links);
+		$pagination_links = str_replace('<li>', '<li class="page-item mb-0">', $pagination_links);
+		$pagination_links = str_replace(
+			'<li class="page-item mb-0"><span aria-current="page" class="page-link current">',
+			'<li class="page-item mb-0 active" aria-current="page"><span class="page-link">',
+			$pagination_links
+		);
+		?>
+		<div class="wrap px-0">
+			<p><a href="<?php echo urlencode( admin_url( 'admin.php?page=gf_settings&subview=' . $this->_slug ) ); ?>">Edit Settings</a></p>
+
+			<div id="top-pagination">
+				<div class="container px-0">
+					<div class="row mx-auto w-100">
+						<div class="col col-12 col-md-6 px-0">
+							<p><strong><?php echo $results['total_count']; ?></strong> total spam entries from all forms.</p>
+						</div>
+						<div class="col col-12 col-md-6 px-0 justify-content-end">
+							<!-- pagination -->
+							<?php echo $pagination_links; ?>
+							<!-- pagination end -->
 						</div>
 					</div>
 				</div>
+			</div>
+			<div id="universal-message-container">
 				<div class="container">
 					<div class="row">
-						<div class="col col-1">Entry ID<br>Date/Time</div>
+						<div class="col col-2">Entry ID<br>Date/Time</div>
 						<div class="col col-2"><br>Form Title</div>
-						<div class="col col-2"><br>Source URL</div>
+						<div class="col col-3"><br>Source URL</div>
 						<div class="col"><br>Other Submission Fields</div>
 					</div>
 				</div>
 				<div class="container pt-2 mt-0">
-					<?php
+		<?php
+		// remove pass-through data before foreach
+		unset($results['current_page']);
+		unset($results['total_count']);
+		unset($results['total_pages']);
 		
 		foreach ($results as $entry) {
 			$id = $entry['id'];
@@ -204,14 +239,14 @@ class GFSpamRules extends GFAddOn {
 			$form_title = $form['title'];
 			
 			$build = '<div class="row py-2 border border-0 border-top border-light-subtle">';
-			$build .= '<div class="col col-1">';
+			$build .= '<div class="col col-2">';
 			$build .= '<a href="'.$url.'" target="_blank" class="pe-2">'.$id.'</a><br>';
 			$build .= $date;
 			$build .= '</div>';
 			$build .= '<div class="col col-2"><strong>';
 			$build .= $form_title;
 			$build .= '</strong></div>';
-			$build .= '<div class="col col-2" style="overflow: hidden;">';
+			$build .= '<div class="col col-3" style="overflow: hidden;">';
 			$build .= '<a href="'.$source.'" target="_blank" class="pe-2">'.$source.'</a>';
 			$build .= '</div>';
 			
@@ -219,8 +254,8 @@ class GFSpamRules extends GFAddOn {
 			$extra = '';
 			foreach( $entry as $key=>$value ) {
 				if ( is_int( (int)$key ) && (int)$key !== 0 && !empty($value) ) {
-					if ( $i > 3 ) {
-						$extra = 'mt-2';
+					if ( strlen( $value ) > 100 ) {
+						$extra = 'col-12 mt-2';
 					}
 					$build .= '<div class="col '.$extra.'">';
 					$build .= $value;
@@ -239,6 +274,18 @@ class GFSpamRules extends GFAddOn {
 				</div>
 				
 			</div><!-- #universal-message-container -->
+
+			<div id="bottom-pagination">
+				<div class="container px-0 pt-1">
+					<div class="row mx-auto w-100">
+						<div class="col px-0 justify-content-end">
+							<!-- pagination -->
+							<?php echo $pagination_links; ?>
+							<!-- pagination end -->
+						</div>
+					</div>
+				</div>
+			</div>
 
 		</div><!-- .wrap -->
 		<?php
