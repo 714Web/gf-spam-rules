@@ -54,7 +54,7 @@ require 'inc/plugin-update-checker-5.3/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $myUpdateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/jeremycaris/gf-spam-rules/',
+    'https://github.com/714Web/gf-spam-rules/',
     __FILE__,
     'gf-spam-rules'
 );
