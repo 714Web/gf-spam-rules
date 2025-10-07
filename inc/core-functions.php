@@ -71,6 +71,145 @@
 
         return $is_spam;
     }
+
+
+    public function sofw_gform_sql_xss_protection( $is_spam, $form, $entry ) {
+        // If already marked as spam by another filter, leave it
+        if ( $is_spam ) { return $is_spam; }
+
+        $setting = parent::get_plugin_setting( 'sql_xss_cmd_protection' );
+
+		if ( empty($setting) ) {
+            GFCommon::log_debug( __METHOD__ . '(): Option not set.' );
+            return $is_spam;
+        }
+
+        // Suspicious pattern signatures (extended and deduped)
+        $sql_injection_patterns = [
+            // Classic SQLi
+            '/\b(UNION\s+SELECT|SELECT\s+.*FROM|INSERT\s+INTO|UPDATE\s+.+SET|DELETE\s+FROM|DROP\s+TABLE|ALTER\s+TABLE|TRUNCATE\s+TABLE|CREATE\s+TABLE|INTO\s+OUTFILE|INTO\s+DUMPFILE|LOAD\s+DATA)\b/i',
+            '/\b(OR|AND)\s*[\( ]*1\s*=\s*1[\) ]*/i',
+            '/(;|--|#|\/\*|\*\/)+\s*(DROP|ALTER|TRUNCATE|EXEC|SLEEP|BENCHMARK|LOAD_FILE|OUTFILE|INTO|DUMPFILE)\b/i',
+            '/\bINFORMATION_SCHEMA\b/i',
+            '/\b(CONCAT|GROUP_CONCAT|HEX|UNHEX|CAST|CONVERT)\s*\(/i',
+            '/\b(SELECT\s+.*@@|@@version|@@datadir|@@hostname)\b/i',
+            '/\bWAITFOR\s+DELAY\b/i',
+            // Hex encoded
+            '/0x[0-9a-fA-F]+/i',
+            // Stacked queries
+            '/;\s*\w+\s*\(/i',
+        ];
+
+        $xss_patterns = [
+            // Script and event handlers
+            '/<\s*script\b[^>]*>|<\/\s*script\s*>/i',
+            '/<\s*iframe\b[^>]*>|<\/\s*iframe\s*>/i',
+            '/<\s*img\b[^>]*onerror\s*=\s*["\"][^"\']*["\"][^>]*>/i',
+            '/<\s*a\b[^>]*href\s*=\s*["\']javascript:[^"\']*["\'][^>]*>/i',
+            '/<\s*body\b[^>]*onload\s*=\s*["\"][^"\']*["\"][^>]*>/i',
+            '/on[a-z]+\s*=\s*["\"][^"\']*["\"]/i', // any event handler
+            // SVG, MathML, and other risky tags
+            '/<\s*(div|span|p|form|input|textarea|button|select|option|link|meta|svg|math|embed|object|applet)[^>]*>/i',
+            '/<\s*(iframe|embed|object|applet|link|meta|svg|math)[^>]*>/i',
+            // srcdoc attribute
+            '/srcdoc\s*=\s*["\"]/i',
+            // style attribute with expression or url(javascript:)
+            '/style\s*=\s*["\"][^"\']*(expression|url\(javascript:)[^"\']*["\"]/i',
+            // data: with alert/prompt/eval
+            '/data\s*:[^,]+,.*(alert|prompt|confirm|eval)\(/i',
+            '/(javascript|vbscript|data):/i',
+            // base64 blobs
+            '/base64\s*,\s*[A-Za-z0-9\/\+=]{40,}/i',
+            // Obfuscated JS
+            '/\b(unescape|fromCharCode|String\\.fromCharCode)\b/i',
+        ];
+
+        $command_patterns = [
+            // Command injection and shell tricks
+            '/\b(ls|cat|whoami|uname|id|pwd|curl|wget|nc|netcat|bash|sh|php|perl|python|ruby|env|export)\b/i',
+            '/\b(;|\||&&|\$\(.*\)|`.*`|\$\{[^}]+\})\b/i', // command chaining, shell vars
+            '/(\b|\W)(system|exec|shell_exec|passthru|popen|proc_open)\s*\(/i',
+            '/(\b|\W)(base64_decode|eval|assert|preg_replace\s*\(\s*["\'].*\/e["\'])/i',
+            '/(\b|\W)(curl|wget|scp|ftp|file_get_contents|fopen|include|require)(_once)?\s*\(/i',
+            // Encoded payloads
+            '/base64\s*,\s*[A-Za-z0-9\/\+=]{40,}/i',
+        ];
+
+        $general_patterns = [
+            // Long non-ASCII or repeated chars
+            '/[\x80-\xFF]{4,}/',
+            '/([a-zA-Z0-9])\1{10,}/',
+            // Suspicious query params
+            '/[?&](id|token|session|key)=/i',
+        ];
+
+        $patterns = array_merge(
+            $sql_injection_patterns,
+            $xss_patterns,
+            $command_patterns,
+            $general_patterns
+        );
+
+        foreach ( $entry as $field_id => $value ) {
+            if ( ! is_string( $value ) ) continue;
+
+            foreach ( $patterns as $regex ) {
+                if ( preg_match( $regex, $value ) ) {
+
+                    // Optional: log what was rejected for tuning/debugging
+                    error_log( sprintf(
+                        '[GF SPAM REJECTED] Form %d, Field %s matched %s. Value: %s',
+                        $form['id'], $field_id, $regex, substr( $value, 0, 200 )
+                    ));
+
+                    // Hard reject: stop processing, don’t save entry
+                    return true;
+                }
+            }
+        }
+
+        return false; // clean entry
+    }
+
+
+    public function suspicious_tld_protection( $is_spam, $form, $entry ) {
+        // If already marked as spam by another filter, leave it
+        if ( $is_spam ) { return $is_spam; }
+
+        $setting = parent::get_plugin_setting( 'suspicious_tld_protection' );
+
+		if ( empty($setting) ) {
+            GFCommon::log_debug( __METHOD__ . '(): Option not set.' );
+            return $is_spam;
+        }
+
+        $patterns = [
+            // Suspicious TLDs
+            '/https?:\/\/[^\s]+\.(ru|cn|tk|xyz|top|click|work|gq|ml|ga|icu|cf|pw|cc|in|bid|info|site|online|space|loan|win|men|stream|review|party|gdn|ninja|science|accountant|faith|date|download|racing|jetzt|wang|kim|red|blue|black|pink|green|gold|pro|rocks|lol|ooo|link|pics|photo|photos|today|trade|webcam|website|wiki|zip|zone)\b/i',
+        ];
+
+        foreach ( $entry as $field_id => $value ) {
+            if ( ! is_string( $value ) ) continue;
+
+            foreach ( $patterns as $regex ) {
+                if ( preg_match( $regex, $value ) ) {
+
+                    // Optional: log what was rejected for tuning/debugging
+                    error_log( sprintf(
+                        '[GF SPAM REJECTED] Form %d, Field %s matched %s. Value: %s',
+                        $form['id'], $field_id, $regex, substr( $value, 0, 200 )
+                    ));
+
+                    // Hard reject: stop processing, don’t save entry
+                    return true;
+                }
+            }
+        }
+
+        return false; // clean entry
+    }
+
+
     
     
     public function sofw_enforce_gravity_forms_anti_spam_honeypot( $form ) {
@@ -93,17 +232,17 @@
         $content_blacklist = parent::get_plugin_setting( 'content_blacklist' );
         $email_blacklist = parent::get_plugin_setting( 'email_blacklist' );
 
-		$url_components = $_SERVER['QUERY_STRING'];
-		if ( empty($url_components) || !is_string($url_components) ) {
-			return $form;
-		}
-		$params = explode( '&', $url_components );
-		foreach ( $params as $k => $v ) {
-			if ( $v == 'subview=gfspamrules' ) {
+        $url_components = $_SERVER['QUERY_STRING'];
+        if ( empty($url_components) || !is_string($url_components) ) {
+            return;
+        }
+        $params = explode( '&', $url_components );
+        foreach ( $params as $k => $v ) {
+            if ( $v == 'subview=gfspamrules' ) {
                 if ( !empty($content_blacklist) ) $this->maybe_update_content_blacklist();
                 if ( !empty($email_blacklist) ) $this->maybe_update_email_blacklist();
-			}
-		}
+            }
+        }
     }
     
     

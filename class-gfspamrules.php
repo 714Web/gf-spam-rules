@@ -42,6 +42,8 @@ class GFSpamRules extends GFAddOn {
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_name_spam'), 11, 3 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_email_blacklist'), 11, 3 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_url_spam'), 11, 3 );
+		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_sql_xss_protection'), 11, 3 );
+		add_filter( 'gform_entry_is_spam', array($cf, 'suspicious_tld_protection'), 11, 3 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_content_blacklist'), 11, 3 );
 		add_filter( 'gform_confirmation', array($cf, 'custom_spam_confirmation'), 11, 3 );
 	}
@@ -61,11 +63,6 @@ class GFSpamRules extends GFAddOn {
 				'src'     => $this->get_base_url() . '/js/gfspamrules-plugin-settings.js',
 				'version' => $this->_version,
 				'deps'    => array( 'jquery' ),
-				// 'strings' => array(
-				// 	'first'  => esc_html__( 'First Choice', 'simpleaddon' ),
-				// 	'second' => esc_html__( 'Second Choice', 'simpleaddon' ),
-				// 	'third'  => esc_html__( 'Third Choice', 'simpleaddon' )
-				// ),
 				'enqueue' => array(
 					array(
 						'admin_page' => array( 'plugin_settings' ),
@@ -144,7 +141,7 @@ class GFSpamRules extends GFAddOn {
 		$search_criteria['status'] = "spam";
 		$form_id = 0;
 		$page_size = 20;
-		$current_page = max( 1, $_REQUEST['pagenum'] );
+		$current_page = max( 1, isset($_REQUEST['pagenum']) ? (int)$_REQUEST['pagenum'] : 1 );
 		$offset   = ($current_page - 1) * $page_size;
 		$sorting = array();
 		$paging = array( 'offset' => $offset, 'page_size' => $page_size ); 
@@ -156,7 +153,7 @@ class GFSpamRules extends GFAddOn {
 		$results['current_page'] = $current_page;
 		$results['total_count'] = $total_count;
 		$results['total_pages'] = $total_pages;
-		
+			
 		return $results;
 	}
 
@@ -196,7 +193,7 @@ class GFSpamRules extends GFAddOn {
 		);
 		?>
 		<div class="wrap px-0">
-			<p><a href="<?php echo urlencode( admin_url( 'admin.php?page=gf_settings&subview=' . $this->_slug ) ); ?>">Edit Settings</a></p>
+			<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=gf_settings&subview=' . $this->_slug ) ); ?>">Edit Settings</a></p>
 
 			<div id="top-pagination">
 				<div class="container px-0">
@@ -336,10 +333,38 @@ class GFSpamRules extends GFAddOn {
 						'type'    => 'checkbox',
 						'name'    => 'enforce_honeypot_title',
 						'description' => '<p>' . sprintf( esc_html__( 'Force the built-in anti-spam honeypot option to be enabled on all forms. This overrides the current setting on all individual forms.', 'gfspamrules' ) ) . '</p>',
+						'tooltip' => esc_html__( 'The Gravity Forms honeypot adds a hidden field to the form when the page loads, and if that field is populated, the honeypot considers the entry spam. It also implements an extra javascript input that is added to the POST request when the form is submitted, so a human would never see it, but submissions will fail validation if this extra input does not contain the expected value.', 'gfspamrules' ),
 						'choices' => array(
 							array(
 								'label' => esc_html__( 'Enable', 'gfspamrules' ),
-								'name'  => 'enforce_honeypot',
+								'name'  => 'enforce_honeypot'
+							),
+						),
+					),
+					array(
+						'label'   => esc_html__( 'SQL/XSS/Command Injection Protection', 'gfspamrules' ),
+						'type'    => 'checkbox',
+						'name'    => 'sql_xss_cmd_protection_title',
+						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they contain SQL, XSS, or command injection patterns.', 'gfspamrules' ) ) . '</p>',
+						'tooltip' => esc_html__( 'Many spam submissions contain malicious patterns, such as SQL injection, XSS (Cross-Site Scripting), command injection, shell tricks, encoded payloads, long non-ASCII, repeated chars, suspiciously long base64, or suspicious query params.', 'gfspamrules' ),
+						'choices' => array(
+							array(
+								'label' => esc_html__( 'Enable', 'gfspamrules' ),
+								'name'  => 'sql_xss_cmd_protection',
+								'default_value' => 1,
+							),
+						),
+					),
+					array(
+						'label'   => esc_html__( 'Suspicious TLD Protection', 'gfspamrules' ),
+						'type'    => 'checkbox',
+						'name'    => 'suspicious_tld_protection_title',
+						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they contain suspicious top-level domains (TLDs).', 'gfspamrules' ) ) . '</p>',
+						'tooltip' => esc_html__( 'Many spam submissions contain suspicious TLDs, such as .ru, .cn, .tk, .xyz, .top, .click, .work, .gq, .ml, .ga, .icu, .cf, .pw, .cc, .in, .bid, .info, .site, .online, .space, .loan, .win, .men, .stream, .review, .party, .gdn, .ninja, .science, .accountant, .faith, .date, .download, .racing, .jetzt, .wang, .kim, .red, .blue, .black, .pink, .green, .gold, .pro, .rocks, .lol, .ooo, .link, .pics, .photo, .photos, .today, .trade, .webcam, .website, .wiki, .zip, .zone.', 'gfspamrules' ),
+						'choices' => array(
+							array(
+								'label' => esc_html__( 'Enable', 'gfspamrules' ),
+								'name'  => 'suspicious_tld_protection',
 								'default_value' => 1,
 							),
 						),

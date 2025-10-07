@@ -14,3 +14,20 @@
 #gform_setting_name_blacklist_add {
     display: none;
 }
+
+.gform-settings-description p {
+    font-size: 0.8em;
+    margin-bottom: 0 !important;
+}
+
+.gform-settings-description, .gform-settings-field__header {
+    margin-bottom: 0.2em !important;
+}
+
+.gform-settings-field {
+    margin-bottom: 1.2rem !important;
+}
+
+.gform-settings-panel__content input[type=checkbox]:checked {
+    background: #ff4343 !important;
+}
