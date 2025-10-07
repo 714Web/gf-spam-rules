@@ -5,8 +5,16 @@
  * 
  */
 
- class GFSpamRulesCoreFunctions extends GFSpamRules {
+class GFSpamRulesCoreFunctions extends GFSpamRules {
     
+    /**
+     * Customizes the spam confirmation message for Gravity Forms.
+     *
+     * @param mixed $confirmation The original confirmation message.
+     * @param array $form The Gravity Forms form array.
+     * @param array $entry The Gravity Forms entry array.
+     * @return string The spam message or the original confirmation.
+     */
     public function custom_spam_confirmation( $confirmation, $form, $entry ) {
         if ( empty( $entry ) || rgar( $entry, 'status' ) === 'spam' ) {
             return 'Your message has not been delivered because it was identified as spam.';
@@ -25,6 +33,14 @@
      * @param array $entry Gravity Forms entry array
      * @return bool false (not spam) for logged-in users if setting enabled, otherwise original $is_spam
      */
+    /**
+     * Allows submissions from logged-in users if the 'bypass_spam' setting is enabled.
+     *
+     * @param bool $is_spam Current spam status (may be true from other filters)
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool False (not spam) for logged-in users if setting enabled, otherwise original $is_spam
+     */
     public function sofw_gform_loggedin_notspam( $is_spam, $form, $entry ) {
         $setting = parent::get_plugin_setting( 'bypass_spam' );
 
@@ -42,6 +58,14 @@
     }
     
     
+    /**
+     * Flags submissions as spam if a URL is detected in text fields.
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if spam detected, otherwise original $is_spam
+     */
     public function sofw_gform_url_spam( $is_spam, $form, $entry ) {
         if ( $is_spam ) { return $is_spam; }
 
@@ -89,6 +113,12 @@
      * @param array $form Gravity Forms form array
      * @return array Modified form array
      */
+    /**
+     * Enforces the Gravity Forms honeypot if the setting is enabled.
+     *
+     * @param array $form Gravity Forms form array
+     * @return array Modified form array with honeypot enabled if setting is truthy
+     */
     public function sofw_enforce_gravity_forms_anti_spam_honeypot( $form ) {
         $setting = $this->get_plugin_setting( 'enforce_honeypot' );
 
@@ -101,6 +131,14 @@
     }
 
 
+    /**
+     * Provides SQL injection, XSS, and command injection protection for Gravity Forms entries.
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if spam detected, otherwise false
+     */
     public function sofw_gform_sql_xss_protection( $is_spam, $form, $entry ) {
         // If already marked as spam by another filter, leave it
         if ( $is_spam ) { return $is_spam; }
@@ -200,6 +238,14 @@
     }
 
 
+    /**
+     * Flags entries as spam if they contain suspicious top-level domains (TLDs).
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if spam detected, otherwise false
+     */
     public function suspicious_tld_protection( $is_spam, $form, $entry ) {
         // If already marked as spam by another filter, leave it
         if ( $is_spam ) { return $is_spam; }
@@ -238,6 +284,14 @@
     }
 
 
+    /**
+     * Rate-limits form submissions by IP address.
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if rate limit exceeded, otherwise false
+     */
     public function sofw_gform_rate_limit_submissions( $is_spam, $form, $entry ) {
         // If already marked as spam by another filter, leave it
         if ( $is_spam ) { return $is_spam; }
@@ -294,6 +348,12 @@
     }
     
 
+    /**
+     * Initiates remote blacklist updates when the Gravity Forms settings page is loaded.
+     *
+     * @param string $hook_suffix The current admin page hook suffix
+     * @return void
+     */
     public function maybe_initiate_remote_blacklists($hook_suffix) {
         if($hook_suffix !== 'forms_page_gf_settings') {
             return;
@@ -316,6 +376,11 @@
     }
     
     
+    /**
+     * Updates the local content blacklist from a remote source if needed.
+     *
+     * @return void
+     */
     public function maybe_update_content_blacklist() {
         // Get comment blacklist
         $response = wp_remote_get(
@@ -350,6 +415,14 @@
     }
     
     
+    /**
+     * Flags entries as spam if they contain blacklisted content.
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if blacklisted content found, otherwise original $is_spam
+     */
     public function sofw_gform_content_blacklist( $is_spam, $form, $entry ) {
         if ( $is_spam ) { return $is_spam; }
 
@@ -431,6 +504,11 @@
     }
     
     
+    /**
+     * Updates the local email blacklist from a remote source if needed.
+     *
+     * @return void
+     */
     public function maybe_update_email_blacklist() {
         // Get comment blacklist
         $response = wp_remote_get(
@@ -465,6 +543,14 @@
     }
     
     
+    /**
+     * Flags entries as spam if they contain blacklisted email addresses.
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if blacklisted email found, otherwise original $is_spam
+     */
     public function sofw_gform_email_blacklist( $is_spam, $form, $entry ) {
         if ( $is_spam ) { return $is_spam; }
 
@@ -522,11 +608,19 @@
     }
     
     
+    /**
+     * Flags entries as spam based on name blacklist, whitelist, and vowel rules.
+     *
+     * @param bool $is_spam Current spam status
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool True if name is blacklisted, not whitelisted, or fails vowel rule; otherwise original $is_spam
+     */
     public function sofw_gform_name_spam( $is_spam, $form, $entry ) {
         if ( $is_spam ) { return $is_spam; }
 
-    $name_blacklist = array();
-    $settings = parent::get_plugin_settings( $form );
+        $name_blacklist = array();
+        $settings = parent::get_plugin_settings( $form );
         if (!empty($settings['name_blacklist'])) {
             if (is_array($settings['name_blacklist'])) {
                 $name_blacklist = array_merge($name_blacklist, $settings['name_blacklist']);
@@ -585,4 +679,4 @@
         }
         return $is_spam;
     }
-        }
+}
