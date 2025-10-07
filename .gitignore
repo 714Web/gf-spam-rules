@@ -39,9 +39,6 @@ yarn-error.log
 # Exclude Composer vendor
 /vendor/
 
-# Exclude test directory
-/test
-
 # Exclude plugin update checker cache
 inc/plugin-update-checker-5.3/.DS_Store
 
