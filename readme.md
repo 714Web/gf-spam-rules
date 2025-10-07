@@ -1,3 +1,6 @@
+<div align="center">
+  <img src="img/gf-spamrules.svg" alt="Gravity Forms FUB Integration" height="96" />
+</div>
 
 # Gravity Forms Spam Rules Add-On
 
