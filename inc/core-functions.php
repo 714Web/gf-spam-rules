@@ -33,14 +33,6 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
      * @param array $entry Gravity Forms entry array
      * @return bool false (not spam) for logged-in users if setting enabled, otherwise original $is_spam
      */
-    /**
-     * Allows submissions from logged-in users if the 'bypass_spam' setting is enabled.
-     *
-     * @param bool $is_spam Current spam status (may be true from other filters)
-     * @param array $form Gravity Forms form array
-     * @param array $entry Gravity Forms entry array
-     * @return bool False (not spam) for logged-in users if setting enabled, otherwise original $is_spam
-     */
     public function sofw_gform_loggedin_notspam( $is_spam, $form, $entry ) {
         $setting = parent::get_plugin_setting( 'bypass_spam' );
 
@@ -112,12 +104,6 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
      *
      * @param array $form Gravity Forms form array
      * @return array Modified form array
-     */
-    /**
-     * Enforces the Gravity Forms honeypot if the setting is enabled.
-     *
-     * @param array $form Gravity Forms form array
-     * @return array Modified form array with honeypot enabled if setting is truthy
      */
     public function sofw_enforce_gravity_forms_anti_spam_honeypot( $form ) {
         $setting = $this->get_plugin_setting( 'enforce_honeypot' );
