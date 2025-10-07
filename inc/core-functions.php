@@ -16,6 +16,15 @@
     }
 
 
+    /**
+     * Always allow submissions from logged-in users, even if other filters mark as spam.
+     * If the 'bypass_spam' setting is enabled and the user is logged in, override all spam checks.
+     *
+     * @param bool $is_spam Current spam status (may be true from other filters)
+     * @param array $form Gravity Forms form array
+     * @param array $entry Gravity Forms entry array
+     * @return bool false (not spam) for logged-in users if setting enabled, otherwise original $is_spam
+     */
     public function sofw_gform_loggedin_notspam( $is_spam, $form, $entry ) {
         $setting = parent::get_plugin_setting( 'bypass_spam' );
 
@@ -25,8 +34,8 @@
         }
 
         if ( !empty($setting) && is_user_logged_in() ) {
-            GFCommon::log_debug( __METHOD__ . '(): Entry marked as not spam for loggedin user.' );
-            $is_spam = false;
+            GFCommon::log_debug( __METHOD__ . '(): Entry marked as not spam for logged-in user (bypass all spam checks).');
+            return false; // Always allow logged-in users
         }
 
         return $is_spam;
@@ -70,6 +79,25 @@
         }
 
         return $is_spam;
+    }
+    
+    
+    /**
+     * Enforce Gravity Forms honeypot if the setting is enabled.
+     * If the 'enforce_honeypot' setting is truthy, sets enableHoneypot on the form.
+     *
+     * @param array $form Gravity Forms form array
+     * @return array Modified form array
+     */
+    public function sofw_enforce_gravity_forms_anti_spam_honeypot( $form ) {
+        $setting = $this->get_plugin_setting( 'enforce_honeypot' );
+
+        if ( empty( $setting ) ) {
+            return $form;
+        }
+        
+        $form['enableHoneypot'] = true;
+        return $form;
     }
 
 
@@ -210,17 +238,59 @@
     }
 
 
-    
-    
-    public function sofw_enforce_gravity_forms_anti_spam_honeypot( $form ) {
-        $setting = parent::get_plugin_setting( 'enforce_honeypot' );
+    public function sofw_gform_rate_limit_submissions( $is_spam, $form, $entry ) {
+        // If already marked as spam by another filter, leave it
+        if ( $is_spam ) { return $is_spam; }
 
-        if ( empty( $setting ) ) {
-            return $form;
+        // Hard-coded rate limit: 3 submissions per 1 minute (60 seconds), 1 hour lockout
+        $max_submissions = 3;
+        $window_seconds = 60;
+        $lockout_seconds = 3600;
+
+        // Get IP address
+        $ip = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0] : $_SERVER['REMOTE_ADDR'];
+        $ip = trim($ip);
+        if (empty($ip)) {
+            GFCommon::log_debug( __METHOD__ . '(): Could not determine IP address.' );
+            return $is_spam;
         }
-        
-        $form['enableHoneypot'] = true;
-        return $form;
+
+        // Sanitize IP for use in transient key (replace non-alphanumeric and non-dot chars with _)
+        $ip_key = preg_replace('/[^a-zA-Z0-9\.]/', '_', $ip);
+
+        // Check for lockout
+        $lockout_key = 'gf_rate_limit_lockout_' . $ip_key;
+        if ( get_transient($lockout_key) ) {
+            GFCommon::log_debug( __METHOD__ . "(): IP $ip is currently locked out due to previous rate limit violation." );
+            return true; // mark as spam
+        }
+
+        // Use a transient to store timestamps for this IP
+        $transient_key = 'gf_rate_limit_' . $ip_key;
+        $timestamps = get_transient($transient_key);
+        if (!is_array($timestamps)) {
+            $timestamps = [];
+        }
+
+        // Remove timestamps outside the window
+        $now = time();
+        $timestamps = array_filter($timestamps, function($ts) use ($now, $window_seconds) {
+            return ($ts > $now - $window_seconds);
+        });
+
+        // Add this submission
+        $timestamps[] = $now;
+
+        // Save back to transient
+        set_transient($transient_key, $timestamps, $window_seconds);
+
+        if (count($timestamps) > $max_submissions) {
+            GFCommon::log_debug( __METHOD__ . "(): Rate limit exceeded for IP $ip. Locking out for $lockout_seconds seconds." );
+            set_transient($lockout_key, 1, $lockout_seconds);
+            return true; // mark as spam
+        }
+
+        return false; // clean entry
     }
     
 
@@ -455,61 +525,64 @@
     public function sofw_gform_name_spam( $is_spam, $form, $entry ) {
         if ( $is_spam ) { return $is_spam; }
 
-		$settings = parent::get_plugin_settings( $form );
-
-		if ( empty($settings['name_blacklist']) ) {
-            GFCommon::log_debug( __METHOD__ . '(): Option not set.' );
-            return $is_spam;
+    $name_blacklist = array();
+    $settings = parent::get_plugin_settings( $form );
+        if (!empty($settings['name_blacklist'])) {
+            if (is_array($settings['name_blacklist'])) {
+                $name_blacklist = array_merge($name_blacklist, $settings['name_blacklist']);
+            } else {
+                $name_blacklist[] = $settings['name_blacklist'];
+            }
+        }
+        if (!empty($settings['name_blacklist_add'])) {
+            $name_blacklist = array_merge($name_blacklist, explode("\r\n", $settings['name_blacklist_add']));
+        }
+        // Always ensure $name_blacklist is an array
+        if (!is_array($name_blacklist)) {
+            $name_blacklist = array();
         }
 
-        $name_blacklist = array();
-        $custom_name_add = $settings['name_blacklist_add'];
-        if ( !empty($custom_name_add) ) {
-            $name_blacklist = explode( "\r\n", $custom_name_add );
-        }
-
-        $field_types_to_check = array(
-            'name',
-        );
-
+        $field_types_to_check = array('name');
         foreach ( $form['fields'] as $field ) {
-            // Skipping fields which are administrative or the wrong type.
             if ( $field->is_administrative() || ! in_array( $field->get_input_type(), $field_types_to_check ) ) {
                 continue;
             }
-
-            // Skipping fields which don't have a value.
             $value = $field->get_value_export( $entry );
             if ( empty( $value ) ) {
                 continue;
             }
-
             GFCommon::log_debug( __METHOD__ . '(): Checking field id '.$field->id.'.' );
             $first  = rgar( $entry, $field->id . '.3' );
             $last   = rgar( $entry, $field->id . '.6' );
-    
-            // if last name contains first name
             if ( str_contains($last, $first) ) {
                 GFCommon::log_debug( __METHOD__ . '(): Last Name contains First Name.' );
                 return true;
             }
-
-            // if names contain integers or characters that shouldn't be in a name
             if ( preg_match('~[0-9_]+~', $first) || preg_match('~[0-9_]+~', $last) ) {
                 GFCommon::log_debug( __METHOD__ . '(): Name contains disallowed characters.' );
                 return true;
             }
-
-            if ( empty($name_blacklist) ) {
-                return $is_spam;
+            if ( !empty($name_blacklist) ) {
+                $first_replaced = str_ireplace($name_blacklist, '', $first);
+                $last_replaced = str_ireplace($name_blacklist, '', $last);
+                if ( strlen($first_replaced) !== strlen($first) || strlen($last_replaced) !== strlen($last) ) {
+                    GFCommon::log_debug( __METHOD__ . '(): Name is in custom blacklist.' );
+                    return true;
+                }
             }
-            if ( strlen( str_ireplace($name_blacklist, '', $first) ) !== strlen($first) || strlen( str_ireplace($name_blacklist, '', $last) ) !== strlen($last) ) {
-                GFCommon::log_debug( __METHOD__ . '(): Name is in custom blacklist.' );
+            $name_whitelist = [
+                'zbyszko','krystl','lyndsbr','rhythms','krzyżan','krzyzan','gryndal','svrček','svrcek','czrnyst',
+            ];
+            $full_name = strtolower($first . $last);
+            $full_name_spaced = strtolower(trim($first . ' ' . $last));
+            $is_whitelisted = in_array($full_name, $name_whitelist) || in_array($full_name_spaced, $name_whitelist);
+            $first_vowel_count = preg_match_all('/[aeiou]/i', $first);
+            $last_vowel_count = preg_match_all('/[aeiou]/i', $last);
+            if ((strlen($first) > 7 && $first_vowel_count <= 1 && !$is_whitelisted) || (strlen($last) > 7 && $last_vowel_count <= 1 && !$is_whitelisted)) {
+                GFCommon::log_debug( __METHOD__ . '(): Name has too few vowels (not whitelisted).' );
                 return true;
             }
         }
-
         return $is_spam;
     }
-
- }
+        }

@@ -370,6 +370,20 @@ class GFSpamRules extends GFAddOn {
 						),
 					),
 					array(
+						'label'   => esc_html__( 'Rate-Limit Submissions', 'gfspamrules' ),
+						'type'    => 'checkbox',
+						'name'    => 'rate_limit_submissions_title',
+						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they exceed the rate limit from a single IP address.', 'gfspamrules' ) ) . '</p>',
+						'tooltip' => esc_html__( 'Enable this option to mark submissions as spam if more than three submissions are received from a single IP address within one minute, and continue to mark new entries from that IP address as spam for the following hour.', 'gfspamrules' ),
+						'choices' => array(
+							array(
+								'label' => esc_html__( 'Enable', 'gfspamrules' ),
+								'name'  => 'rate_limit_submissions',
+								'default_value' => 1,
+							),
+						),
+					),
+					array(
 						'label'   => esc_html__( 'Enable Content Blacklist?', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'content_blacklist_title',
@@ -420,7 +434,7 @@ class GFSpamRules extends GFAddOn {
 						'type'    => 'checkbox',
 						'name'    => 'name_blacklist_title',
 						// translators: %1 is an opening <a> tag, and %2 is a closing </a> tag.
-						'description' => '<p>' . sprintf( esc_html__( 'Mark form submissions as spam if the Last Name field contains the First Name (E.g., RobertGurge RobertGurgess) or if either name field contains characters that should never be in a name (E.g., underscore, integer, etc). Also enables the ability to blacklist additional custom names.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . sprintf( esc_html__( 'Mark form submissions as spam if the Last Name field contains the First Name (E.g., RobertGurge RobertGurgess), if either name field contains characters that should never be in a name (E.g., underscore, integer, etc), or if names are seven or more characters long but only contain one or no vowels. Also enables the ability to blacklist additional custom names.', 'gfspamrules' ) ) . '</p>',
 						'choices' => array(
 							array(
 								'label' => esc_html__( 'Enable', 'gfspamrules' ),
