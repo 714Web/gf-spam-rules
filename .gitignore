@@ -1,5 +1,52 @@
+# WordPress .gitignore template
+#
+# Exclude OS junk
+.DS_Store
+Thumbs.db
 
-.DS_Store
-.DS_Store
-inc/.DS_Store
+# Exclude WordPress core files (if not versioning core)
+wp-admin/
+wp-includes/
+
+# Exclude uploads and cache
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+
+# Exclude plugins and themes (if not versioning all)
+# Uncomment if you want to ignore all except your custom plugin/theme
+# wp-content/plugins/*
+# !wp-content/plugins/gf-spam-rules/
+# wp-content/themes/*
+# !wp-content/themes/your-theme/
+
+# Exclude log files and backups
+*.log
+*.sql
+db_backup/
+
+# Exclude environment/config files
+.env
+.env.*
+wp-config-local.php
+local-xdebuginfo.php
+
+# Exclude node/npm/yarn artifacts
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Exclude Composer vendor
+/vendor/
+
+# Exclude test directory
+/test
+
+# Exclude plugin update checker cache
 inc/plugin-update-checker-5.3/.DS_Store
+
+# Exclude IDE/project files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
