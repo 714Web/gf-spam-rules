@@ -24,7 +24,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
-define( 'GF_SPAMRULES_VERSION', '0.11' );
+define( 'GF_SPAMRULES_VERSION', '0.12' );
 
 add_action( 'gform_loaded', array( 'GF_SpamRules_Bootstrap', 'load' ), 5 );
 
