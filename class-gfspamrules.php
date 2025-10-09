@@ -383,6 +383,36 @@ class GFSpamRules extends GFAddOn {
 							),
 						),
 					),
+					// --- Cloudflare Integration Fields (moved below Rate-Limit Submissions) ---
+					array(
+						'label'   => esc_html__( 'Block Rate-Limited IPs in Cloudflare', 'gfspamrules' ),
+						'type'    => 'checkbox',
+						'name'    => 'cloudflare_block_enabled_title',
+						'description' => '<p>' . esc_html__( 'When enabled, any IP address that is rate-limited by this plugin will also be blocked at the account level in Cloudflare using an IP Access Rule.', 'gfspamrules' ) . '</p>',
+						'tooltip' => esc_html__( 'Requires a Cloudflare API token with appropriate permissions and your Cloudflare Account ID.', 'gfspamrules' ),
+						'choices' => array(
+							array(
+								'label' => esc_html__( 'Enable Cloudflare IP Blocking', 'gfspamrules' ),
+								'name'  => 'cloudflare_block_enabled',
+							),
+						),
+						'onclick' => "if(this.checked){jQuery('#gform_setting_cloudflare_api_token').show();} else{jQuery('#gform_setting_cloudflare_api_token').hide();} if(this.checked){jQuery('#gform_setting_cloudflare_account_id').show();} else{jQuery('#gform_setting_cloudflare_account_id').hide();}",
+					),
+					array(
+						'label'   => esc_html__( 'Cloudflare API Token', 'gfspamrules' ),
+						'type'    => 'text',
+						'name'    => 'cloudflare_api_token',
+						'class'   => 'medium',
+						'description' => '<p>' . esc_html__( 'Enter your Cloudflare API token (with Firewall Access Rules permissions).', 'gfspamrules' ) . '</p>',
+					),
+					array(
+						'label'   => esc_html__( 'Cloudflare Account ID', 'gfspamrules' ),
+						'type'    => 'text',
+						'name'    => 'cloudflare_account_id',
+						'class'   => 'medium',
+						'description' => '<p>' . esc_html__( 'Enter your Cloudflare Account ID (found in your Cloudflare dashboard).', 'gfspamrules' ) . '</p>',
+					),
+					// --- End Cloudflare Integration Fields ---
 					array(
 						'label'   => esc_html__( 'Enable Content Blacklist?', 'gfspamrules' ),
 						'type'    => 'checkbox',

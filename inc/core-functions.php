@@ -5,6 +5,8 @@
  * 
  */
 
+require_once __DIR__ . '/block-ip-cloudflare.php';
+
 class GFSpamRulesCoreFunctions extends GFSpamRules {
     
     /**
@@ -327,6 +329,21 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
         if (count($timestamps) > $max_submissions) {
             GFCommon::log_debug( __METHOD__ . "(): Rate limit exceeded for IP $ip. Locking out for $lockout_seconds seconds." );
             set_transient($lockout_key, 1, $lockout_seconds);
+
+            // --- Cloudflare Integration ---
+            $cloudflare_enabled = parent::get_plugin_setting('cloudflare_block_enabled');
+            $cloudflare_token = parent::get_plugin_setting('cloudflare_api_token');
+            $cloudflare_account = parent::get_plugin_setting('cloudflare_account_id');
+            if (!empty($cloudflare_enabled) && !empty($cloudflare_token) && !empty($cloudflare_account)) {
+                $cf_result = block_ip_in_cloudflare($ip, $cloudflare_token, $cloudflare_account);
+                if ($cf_result === true) {
+                    GFCommon::log_debug(__METHOD__ . "(): Successfully blocked IP $ip in Cloudflare.");
+                } else {
+                    GFCommon::log_debug(__METHOD__ . "(): Cloudflare block failed: " . print_r($cf_result, true));
+                }
+            }
+            // --- End Cloudflare Integration ---
+
             return true; // mark as spam
         }
 

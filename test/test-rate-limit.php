@@ -1,9 +1,3 @@
-// Mock GFCommon for logging
-if (!class_exists('GFCommon')) {
-    class GFCommon {
-        public static function log_debug($msg) { /* echo "[DEBUG] $msg\n"; */ }
-    }
-}
 <?php
 
 // Mock base class if not present
@@ -55,20 +49,36 @@ $core = new GFSpamRulesCoreFunctions();
 $form = ['id' => 1, 'fields' => []];
 $entry = [];
 
-// Simulate 4 submissions in quick succession
+
+
+// Cloudflare test credentials (replace with real/test values as needed)
+
+$cloudflare_api_token = getenv('CF_API_TOKEN') ?: 'L9zn-tIvsMSE2yyNgl1dFUd-u7DS1FXBffd_NaLO';
+$cloudflare_account_id = getenv('CF_ACCOUNT_ID') ?: 'ebcff93a5149b6d37aa799ea12c661e0';
+
+
 $results = [];
-for ($i = 1; $i <= 4; $i++) {
+$blocked = false;
+// Only mock if using test token or test account id
+$mock_mode = ($cloudflare_api_token === 'test_api_token' || $cloudflare_account_id === 'test_account_id');
+for ($i = 1; $i <= 5; $i++) {
     $result = $core->sofw_gform_rate_limit_submissions(false, $form, $entry);
-    $results[] = $result ? 'SPAM' : 'OK';
-}
-
-// Simulate a 5th submission (should be locked out)
-$result = $core->sofw_gform_rate_limit_submissions(false, $form, $entry);
-$results[] = $result ? 'SPAM' : 'OK';
-
-// Output results
-foreach ($results as $idx => $res) {
-    echo "Submission " . ($idx+1) . ": $res\n";
+    if ($result && !$blocked) {
+        // Only block once for the first SPAM
+        $blocked = true;
+        echo "Submission $i: SPAM (triggering Cloudflare block)\n";
+        if ($mock_mode) {
+            echo "[Cloudflare API Debug] MOCK MODE: Simulating success for IP $test_ip\n";
+            $cf_result = true;
+        } else {
+            require_once __DIR__ . '/../inc/block-ip-cloudflare.php';
+            $cf_result = block_ip_in_cloudflare($test_ip, $cloudflare_api_token, $cloudflare_account_id);
+        }
+        echo "Cloudflare block_ip_in_cloudflare() result: ";
+        var_dump($cf_result);
+    } else {
+        echo "Submission $i: " . ($result ? 'SPAM' : 'OK') . "\n";
+    }
 }
 
 // Clean up
