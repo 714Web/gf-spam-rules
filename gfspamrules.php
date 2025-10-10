@@ -3,7 +3,7 @@
 Plugin Name: Gravity Forms Spam Rules Add-On
 Plugin URI: https://github.com/jeremycaris/gf-spam-rules
 Description: A Gravity Forms add-on to enable spam filtering options.
-Version: 0.13
+Version: 0.14
 Author: Jeremy Caris
 Author URI: https://github.com/jeremycaris
 
@@ -24,7 +24,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
-define( 'GF_SPAMRULES_VERSION', '0.13' );
+define( 'GF_SPAMRULES_VERSION', '0.14' );
 
 add_action( 'gform_loaded', array( 'GF_SpamRules_Bootstrap', 'load' ), 5 );
 
