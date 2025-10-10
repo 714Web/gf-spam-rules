@@ -12,7 +12,7 @@ jQuery(document).ready(function($) {
     }
 
     // --- Cloudflare Key Masking (robust selector) ---
-    console.log('[GFSpamRules] Settings JS loaded');
+    // console.log('[GFSpamRules] Settings JS loaded');
 
     function findSettingInput(name) {
         // Prefer the settings row id Gravity Forms renders: #gform_setting_<name>
@@ -40,30 +40,39 @@ jQuery(document).ready(function($) {
             console.log('[GFSpamRules] Field not found:', name);
             return;
         }
-        // Avoid duplicate bindings
         $input.off('.gfspmask');
         var realValue = $input.val();
+        var maskedValue = maskValue(realValue);
+        var isDirty = false;
 
-        // Store real value in data attribute
-        $input.data('real-value', realValue);
+        // Store the real value in a closure, not in the DOM
+        $input.val(maskedValue);
 
-        // Mask on load
-        $input.val(maskValue(realValue));
-
-        $input.on('focus.gfspmask', function() {
-            $input.val($input.data('real-value'));
-        });
-        $input.on('blur.gfspmask', function() {
-            $input.val(maskValue($input.data('real-value')));
+        $input.on('focus.gfspmask click.gfspmask', function(e) {
+            // Prevent revealing the real value
+            // Optionally, select the field for overwrite
+            setTimeout(function() { $input[0].setSelectionRange(maskedValue.length, maskedValue.length); }, 0);
         });
         $input.on('input.gfspmask', function() {
-            $input.data('real-value', $input.val());
+            isDirty = true;
         });
-        // On form submit, restore real value
+        $input.on('paste.gfspmask', function() {
+            isDirty = true;
+        });
+        $input.on('keydown.gfspmask', function(e) {
+            // If user starts typing, clear the field for new value
+            if (!isDirty && e.key.length === 1) {
+                $input.val("");
+                isDirty = true;
+            }
+        });
+        // On form submit, restore real value if not dirty
         $input.closest('form').off('submit.gfspmask').on('submit.gfspmask', function() {
-            $input.val($input.data('real-value'));
+            if (!isDirty && $input.val() === maskedValue) {
+                $input.val(realValue);
+            }
+            // else: user entered a new value, submit as-is
         });
-        console.log('[GFSpamRules] Masked field initialized:', name, 'found:', $input.length);
     }
 
     setupMaskingByName('cloudflare_api_token');
