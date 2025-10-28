@@ -289,9 +289,16 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
         $window_seconds = 60;
         $lockout_seconds = 3600;
 
-        // Get IP address
-        $ip = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0] : $_SERVER['REMOTE_ADDR'];
-        $ip = trim($ip);
+        // Get IP address (prefer Cloudflare header, then XFF, then REMOTE_ADDR)
+        if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) {
+            $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
+        } elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+            $xff = explode( ',', $_SERVER['HTTP_X_FORWARDED_FOR'] );
+            $ip = trim( $xff[0] );
+        } else {
+            $ip = isset( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : '';
+        }
+        $ip = trim( $ip );
         if (empty($ip)) {
             GFCommon::log_debug( __METHOD__ . '(): Could not determine IP address.' );
             return $is_spam;
