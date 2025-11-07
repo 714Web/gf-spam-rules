@@ -128,101 +128,91 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
      * @return bool True if spam detected, otherwise false
      */
     public function sofw_gform_sql_xss_protection( $is_spam, $form, $entry ) {
-        // If already marked as spam by another filter, leave it
+        // Respect previous spam decisions
         if ( $is_spam ) { return $is_spam; }
 
         $setting = parent::get_plugin_setting( 'sql_xss_cmd_protection' );
-
-		if ( empty($setting) ) {
+        if ( empty( $setting ) ) {
             GFCommon::log_debug( __METHOD__ . '(): Option not set.' );
             return $is_spam;
         }
 
-        // Suspicious pattern signatures (extended and deduped)
+        // Conservative pattern set to reduce false positives
         $sql_injection_patterns = [
-            // Classic SQLi
-            '/\b(UNION\s+SELECT|SELECT\s+.*FROM|INSERT\s+INTO|UPDATE\s+.+SET|DELETE\s+FROM|DROP\s+TABLE|ALTER\s+TABLE|TRUNCATE\s+TABLE|CREATE\s+TABLE|INTO\s+OUTFILE|INTO\s+DUMPFILE|LOAD\s+DATA)\b/i',
-            '/\b(OR|AND)\s*[\( ]*1\s*=\s*1[\) ]*/i',
-            '/(;|--|#|\/\*|\*\/)+\s*(DROP|ALTER|TRUNCATE|EXEC|SLEEP|BENCHMARK|LOAD_FILE|OUTFILE|INTO|DUMPFILE)\b/i',
-            '/\bINFORMATION_SCHEMA\b/i',
-            '/\b(CONCAT|GROUP_CONCAT|HEX|UNHEX|CAST|CONVERT)\s*\(/i',
-            '/\b(SELECT\s+.*@@|@@version|@@datadir|@@hostname)\b/i',
+            '/\bUNION\s+SELECT\b/i',
+            '/\bINSERT\s+INTO\b/i',
+            '/\bUPDATE\s+.+\s+SET\b/i',
+            '/\bDELETE\s+FROM\b/i',
+            '/\bDROP\s+TABLE\b/i',
+            '/\bALTER\s+TABLE\b/i',
+            '/\bTRUNCATE\s+TABLE\b/i',
             '/\bWAITFOR\s+DELAY\b/i',
-            // Hex encoded
-            '/0x[0-9a-fA-F]+/i',
-            // Stacked queries
-            '/;\s*\w+\s*\(/i',
+            '/(--|#)\s*[^\n]*$/m',
+            '/\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\//',
+            '/\b(OR|AND)\s*\(?\s*1\s*=\s*1\s*\)?/i',
         ];
 
         $xss_patterns = [
-            // Script and event handlers
-            '/<\s*script\b[^>]*>|<\/\s*script\s*>/i',
-            '/<\s*iframe\b[^>]*>|<\/\s*iframe\s*>/i',
-            '/<\s*img\b[^>]*onerror\s*=\s*["\"][^"\']*["\"][^>]*>/i',
-            '/<\s*a\b[^>]*href\s*=\s*["\']javascript:[^"\']*["\'][^>]*>/i',
-            '/<\s*body\b[^>]*onload\s*=\s*["\"][^"\']*["\"][^>]*>/i',
-            '/on[a-z]+\s*=\s*["\"][^"\']*["\"]/i', // any event handler
-            // SVG, MathML, and other risky tags
-            '/<\s*(div|span|p|form|input|textarea|button|select|option|link|meta|svg|math|embed|object|applet)[^>]*>/i',
-            '/<\s*(iframe|embed|object|applet|link|meta|svg|math)[^>]*>/i',
-            // srcdoc attribute
-            '/srcdoc\s*=\s*["\"]/i',
-            // style attribute with expression or url(javascript:)
-            '/style\s*=\s*["\"][^"\']*(expression|url\(javascript:)[^"\']*["\"]/i',
-            // data: with alert/prompt/eval
-            '/data\s*:[^,]+,.*(alert|prompt|confirm|eval)\(/i',
-            '/(javascript|vbscript|data):/i',
-            // base64 blobs
-            '/base64\s*,\s*[A-Za-z0-9\/\+=]{40,}/i',
-            // Obfuscated JS
-            '/\b(unescape|fromCharCode|String\\.fromCharCode)\b/i',
+            // Tags and protocols that should never appear in text fields
+            '/<\s*script\b[^>]*>/i',
+            '/<\s*\/\s*script\s*>/i',
+            '/<\s*iframe\b[^>]*>/i',
+            '/<\s*\/\s*iframe\s*>/i',
+            '/on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\')/i',
+            '/href\s*=\s*["\']\s*javascript:/i',
+            '/src\s*=\s*["\']\s*javascript:/i',
+            '/style\s*=\s*["\'][^"\']*(expression|url\(javascript:)\b[^"\']*["\']/i',
+            '/<\s*img\b[^>]*onerror\s*=\s*("[^"]*"|\'[^\']*\')/i',
         ];
 
         $command_patterns = [
-            // Command injection and shell tricks
-            '/\b(ls|cat|whoami|uname|id|pwd|curl|wget|nc|netcat|bash|sh|php|perl|python|ruby|env|export)\b/i',
-            '/\b(;|\||&&|\$\(.*\)|`.*`|\$\{[^}]+\})\b/i', // command chaining, shell vars
-            '/(\b|\W)(system|exec|shell_exec|passthru|popen|proc_open)\s*\(/i',
-            '/(\b|\W)(base64_decode|eval|assert|preg_replace\s*\(\s*["\'].*\/e["\'])/i',
-            '/(\b|\W)(curl|wget|scp|ftp|file_get_contents|fopen|include|require)(_once)?\s*\(/i',
-            // Encoded payloads
-            '/base64\s*,\s*[A-Za-z0-9\/\+=]{40,}/i',
-        ];
-
-        $general_patterns = [
-            // Long non-ASCII or repeated chars
-            '/[\x80-\xFF]{4,}/',
-            '/([a-zA-Z0-9])\1{10,}/',
-            // Suspicious query params
-            '/[?&](id|token|session|key)=/i',
+            // Command injection operators or dangerous PHP function calls
+            '/\$\([^)]*\)|`[^`]*`|\$\{[^}]+\}/',
+            '/\b(system|exec|shell_exec|passthru|popen|proc_open|eval|assert|base64_decode)\s*\(/i',
         ];
 
         $patterns = array_merge(
             $sql_injection_patterns,
             $xss_patterns,
-            $command_patterns,
-            $general_patterns
+            $command_patterns
         );
 
-        foreach ( $entry as $field_id => $value ) {
-            if ( ! is_string( $value ) ) continue;
+        // Only inspect actual user-submitted field values, not meta like source_url, ip, user_agent
+        $field_types_to_check = [
+            'text', 'textarea', 'name', 'email', 'phone', 'website',
+            'post_title', 'post_content', 'post_excerpt'
+        ];
+
+        foreach ( $form['fields'] as $field ) {
+            if ( $field->is_administrative() || ! in_array( $field->get_input_type(), $field_types_to_check, true ) ) {
+                continue;
+            }
+
+            $value = $field->get_value_export( $entry );
+            if ( empty( $value ) ) { continue; }
+
+            // Normalize value to string for scanning
+            if ( is_array( $value ) ) {
+                $value = implode( ' ', array_map( 'strval', array_values( $value ) ) );
+            } elseif ( ! is_string( $value ) ) {
+                $value = strval( $value );
+            }
+
+            // Quick length cap to avoid heavy regex work on huge blobs
+            $scan_value = substr( $value, 0, 5000 );
 
             foreach ( $patterns as $regex ) {
-                if ( preg_match( $regex, $value ) ) {
-
-                    // Optional: log what was rejected for tuning/debugging
-                    error_log( sprintf(
-                        '[GF SPAM REJECTED] Form %d, Field %s matched %s. Value: %s',
-                        $form['id'], $field_id, $regex, substr( $value, 0, 200 )
-                    ));
-
-                    // Hard reject: stop processing, don’t save entry
-                    return true;
+                if ( preg_match( $regex, $scan_value ) ) {
+                    GFCommon::log_debug( sprintf(
+                        '%s: SPAM matched. Form %d Field %s Pattern %s Value %.200s',
+                        __METHOD__, rgar( $form, 'id' ), $field->id, $regex, $scan_value
+                    ) );
+                    return true; // mark as spam
                 }
             }
         }
 
-        return false; // clean entry
+        return $is_spam; // no matches found
     }
 
 
