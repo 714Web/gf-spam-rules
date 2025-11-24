@@ -148,7 +148,7 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
             '/\bTRUNCATE\s+TABLE\b/i',
             '/\bWAITFOR\s+DELAY\b/i',
             '/(--|#)\s*[^\n]*$/m',
-            '/\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\//',
+            '/\/\*.*?\*\//s',
             '/\b(OR|AND)\s*\(?\s*1\s*=\s*1\s*\)?/i',
         ];
 
@@ -237,7 +237,7 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
 
         $patterns = [
             // Suspicious TLDs
-            '/https?:\/\/[^\s]+\.(ru|cn|tk|xyz|top|click|work|gq|ml|ga|icu|cf|pw|cc|in|bid|info|site|online|space|loan|win|men|stream|review|party|gdn|ninja|science|accountant|faith|date|download|racing|jetzt|wang|kim|red|blue|black|pink|green|gold|pro|rocks|lol|ooo|link|pics|photo|photos|today|trade|webcam|website|wiki|zip|zone)\b/i',
+            '~https?:\/\/[^\s]+\.(ru|cn|tk|xyz|top|click|work|gq|ml|ga|icu|cf|pw|cc|in|bid|info|site|online|space|loan|win|men|stream|review|party|gdn|ninja|science|accountant|faith|date|download|racing|jetzt|wang|kim|red|blue|black|pink|green|gold|pro|rocks|lol|ooo|link|pics|photo|photos|today|trade|webcam|website|wiki|zip|zone)\b~i',
         ];
 
         foreach ( $entry as $field_id => $value ) {
