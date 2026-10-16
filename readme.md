@@ -67,12 +67,7 @@ A powerful, flexible anti-spam toolkit for Gravity Forms.
 ## Development & Testing
 
 - All core logic is in `inc/core-functions.php`.
-- Each major function has a corresponding test script in `/test`.
-- To run all tests:
-	```sh
-	cd wp-content/plugins/gf-spam-rules
-	for f in test/test-*.php; do php "$f"; done
-	```
+- The `/test` directory was removed from the distributed plugin (it shipped without an `ABSPATH` guard, making it directly web-requestable, and contained a live Cloudflare API token used as a fallback default). Re-create tests outside the web root if needed, and read the Cloudflare credentials from the plugin's own settings (**Forms → Settings → Spam Rules**) rather than hardcoding them.
 - The plugin uses [Plugin Update Checker](https://github.com/YahnisElsts/plugin-update-checker) for GitHub-based updates.
 
 ---

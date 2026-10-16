@@ -41,19 +41,8 @@ Gravity Forms Spam Rules Add-On is a WordPress plugin that extends Gravity Forms
 
 ## Testing Instructions
 
-- **Test scripts location:** `/test` directory
-- **Run all tests:**
-  ```sh
-  cd wp-content/plugins/gf-spam-rules
-  for f in test/test-*.php; do php "$f"; done
-  ```
-- **Individual test:**
-  ```sh
-  php test/test-name-spam.php
-  ```
-- **Test coverage:**
-  - Each major function has a corresponding test script.
-  - Tests are standalone and mock WordPress/Gravity Forms functions as needed.
+- The `/test` directory was removed from the distributed plugin: it shipped with no `ABSPATH` guard (directly web-requestable) and `test-rate-limit.php` contained a live Cloudflare API token as a literal fallback default.
+- If tests are recreated, place them outside the web root and read the Cloudflare credentials from the plugin's own settings (**Forms → Settings → Spam Rules**) rather than hardcoding them.
 
 ---
 

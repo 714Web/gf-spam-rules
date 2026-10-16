@@ -47,3 +47,4 @@ inc/plugin-update-checker-5.3/.DS_Store
 .vscode/
 *.sublime-project
 *.sublime-workspace
+inc/.DS_Store

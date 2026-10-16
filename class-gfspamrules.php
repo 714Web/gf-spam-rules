@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 GFForms::include_addon_framework();
 
 class GFSpamRules extends GFAddOn {
@@ -7,7 +11,7 @@ class GFSpamRules extends GFAddOn {
 	protected $_version = GF_SPAMRULES_VERSION;
 	protected $_min_gravityforms_version = '1.9';
 	protected $_slug = 'gfspamrules';
-	protected $_path = 'gfspamrules/gfspamrules.php';
+	protected $_path = 'gf-spam-rules/gfspamrules.php';
 	protected $_full_path = __FILE__;
 	protected $_title = 'Gravity Forms Spam Rules';
 	protected $_short_title = 'Spam Rules';
@@ -33,12 +37,13 @@ class GFSpamRules extends GFAddOn {
 	public function init() {
 		parent::init();
 
-		require( 'inc/core-functions.php' );
+		require_once( __DIR__ . '/inc/core-functions.php' );
 		$cf = new GFSpamRulesCoreFunctions();
 		
 		add_filter( 'gform_form_post_get_meta', array($cf, 'sofw_enforce_gravity_forms_anti_spam_honeypot') );
 		add_action( 'admin_enqueue_scripts', array($cf, 'maybe_initiate_remote_blacklists'), 10, 1 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_loggedin_notspam'), 12, 3 );
+		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_rate_limit_submissions'), 11, 3 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_name_spam'), 11, 3 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_email_blacklist'), 11, 3 );
 		add_filter( 'gform_entry_is_spam', array($cf, 'sofw_gform_url_spam'), 11, 3 );
@@ -147,7 +152,11 @@ class GFSpamRules extends GFAddOn {
 		$paging = array( 'offset' => $offset, 'page_size' => $page_size ); 
 		$total_count = 0;
 		$results = GFAPI::get_entries( $form_id, $search_criteria, $sorting, $paging, $total_count );
-		$total_pages = ceil( $total_count / $page_size ); 
+		if ( is_wp_error( $results ) ) {
+			$results = array();
+			$total_count = 0;
+		}
+		$total_pages = ceil( $total_count / $page_size );
 
 		// pass-through data
 		$results['current_page'] = $current_page;
@@ -199,7 +208,7 @@ class GFSpamRules extends GFAddOn {
 				<div class="container px-0">
 					<div class="row mx-auto w-100">
 						<div class="col col-12 col-md-6 px-0">
-							<p><strong><?php echo $results['total_count']; ?></strong> total spam entries from all forms.</p>
+							<p><strong><?php echo esc_html( $results['total_count'] ); ?></strong> total spam entries from all forms.</p>
 						</div>
 						<div class="col col-12 col-md-6 px-0 justify-content-end">
 							<!-- pagination -->
@@ -226,45 +235,45 @@ class GFSpamRules extends GFAddOn {
 		unset($results['total_pages']);
 		
 		foreach ($results as $entry) {
-			$id = $entry['id'];
-			$form_id = $entry['form_id'];
-			$date = $entry['date_created'];
-			$source = $entry['source_url'];
+			$id = $entry['id'] ?? '';
+			$form_id = $entry['form_id'] ?? '';
+			$date = $entry['date_created'] ?? '';
+			$source = $entry['source_url'] ?? '';
 			$url = admin_url('admin.php?page=gf_entries&view=entry&id='.$form_id.'&lid='.$id);
-			
+
 			$form = GFAPI::get_form( $form_id );
-			$form_title = $form['title'];
-			
+			$form_title = $form ? $form['title'] : '';
+
 			$build = '<div class="row py-2 border border-0 border-top border-light-subtle">';
 			$build .= '<div class="col col-2">';
-			$build .= '<a href="'.$url.'" target="_blank" class="pe-2">'.$id.'</a><br>';
-			$build .= $date;
+			$build .= '<a href="'.esc_url( $url ).'" target="_blank" class="pe-2">'.esc_html( $id ).'</a><br>';
+			$build .= esc_html( $date );
 			$build .= '</div>';
 			$build .= '<div class="col col-2"><strong>';
-			$build .= $form_title;
+			$build .= esc_html( $form_title );
 			$build .= '</strong></div>';
 			$build .= '<div class="col col-3" style="overflow: hidden;">';
-			$build .= '<a href="'.$source.'" target="_blank" class="pe-2">'.$source.'</a>';
+			$build .= '<a href="'.esc_url( $source ).'" target="_blank" class="pe-2">'.esc_html( $source ).'</a>';
 			$build .= '</div>';
-			
+
 			$i = 0;
 			$extra = '';
 			foreach( $entry as $key=>$value ) {
-				if ( is_int( (int)$key ) && (int)$key !== 0 && !empty($value) ) {
+				if ( (int)$key !== 0 && !empty($value) && ! is_array( $value ) ) {
 					if ( strlen( $value ) > 100 ) {
 						$extra = 'col-12 mt-2';
 					}
 					$build .= '<div class="col '.$extra.'">';
-					$build .= $value;
+					$build .= esc_html( $value );
 					$build .= '</div>';
 					$i++;
 				}
 			}
-			
+
 			$build .= '</div>';
-			
-			
-			print_r( $build );
+
+
+			echo $build;
 		}
 		  
 							?>
@@ -296,13 +305,13 @@ class GFSpamRules extends GFAddOn {
 	public function plugin_settings_fields() {
 		return array(
 			array(
-				'title'  => esc_html__( $this->_short_title, 'gfspamrules' ),
+				'title'  => esc_html__( 'Spam Rules', 'gfspamrules' ),
 				'fields' => array(
 					array(
 						'label'   => esc_html__( 'Bypass Spam Filters For Logged-In Users', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'bypass_spam_title',
-						'description' => '<p>' . sprintf( esc_html__( 'Ensure form submissions for logged-in users are never marked as spam.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Ensure form submissions for logged-in users are never marked as spam.', 'gfspamrules' ) . '</p>',
 						'tooltip' => sprintf(
 							'<h6>%s</h6>%s',
 							esc_html__( 'Notice', 'gfspamrules' ),
@@ -319,7 +328,7 @@ class GFSpamRules extends GFAddOn {
 						'label'   => esc_html__( 'URL Spam Protection', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'url_spam_title',
-						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they contain URL\'s. Only text, textarea, and post_title fields will be evaluated.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Marks form submissions as spam if they contain URL\'s. Only text, textarea, and post_title fields will be evaluated.', 'gfspamrules' ) . '</p>',
 						'tooltip' => esc_html__( 'The majority of spam submissions contain URL\'s.', 'gfspamrules' ),
 						'choices' => array(
 							array(
@@ -332,7 +341,7 @@ class GFSpamRules extends GFAddOn {
 						'label'   => esc_html__( 'Enforce Honeypot', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'enforce_honeypot_title',
-						'description' => '<p>' . sprintf( esc_html__( 'Force the built-in anti-spam honeypot option to be enabled on all forms. This overrides the current setting on all individual forms.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Force the built-in anti-spam honeypot option to be enabled on all forms. This overrides the current setting on all individual forms.', 'gfspamrules' ) . '</p>',
 						'tooltip' => esc_html__( 'The Gravity Forms honeypot adds a hidden field to the form when the page loads, and if that field is populated, the honeypot considers the entry spam. It also implements an extra javascript input that is added to the POST request when the form is submitted, so a human would never see it, but submissions will fail validation if this extra input does not contain the expected value.', 'gfspamrules' ),
 						'choices' => array(
 							array(
@@ -345,7 +354,7 @@ class GFSpamRules extends GFAddOn {
 						'label'   => esc_html__( 'SQL/XSS/Command Injection Protection', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'sql_xss_cmd_protection_title',
-						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they contain SQL, XSS, or command injection patterns.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Marks form submissions as spam if they contain SQL, XSS, or command injection patterns.', 'gfspamrules' ) . '</p>',
 						'tooltip' => esc_html__( 'Many spam submissions contain malicious patterns, such as SQL injection, XSS (Cross-Site Scripting), command injection, shell tricks, encoded payloads, long non-ASCII, repeated chars, suspiciously long base64, or suspicious query params.', 'gfspamrules' ),
 						'choices' => array(
 							array(
@@ -359,7 +368,7 @@ class GFSpamRules extends GFAddOn {
 						'label'   => esc_html__( 'Suspicious TLD Protection', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'suspicious_tld_protection_title',
-						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they contain suspicious top-level domains (TLDs).', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Marks form submissions as spam if they contain suspicious top-level domains (TLDs).', 'gfspamrules' ) . '</p>',
 						'tooltip' => esc_html__( 'Many spam submissions contain suspicious TLDs, such as .ru, .cn, .tk, .xyz, .top, .click, .work, .gq, .ml, .ga, .icu, .cf, .pw, .cc, .in, .bid, .info, .site, .online, .space, .loan, .win, .men, .stream, .review, .party, .gdn, .ninja, .science, .accountant, .faith, .date, .download, .racing, .jetzt, .wang, .kim, .red, .blue, .black, .pink, .green, .gold, .pro, .rocks, .lol, .ooo, .link, .pics, .photo, .photos, .today, .trade, .webcam, .website, .wiki, .zip, .zone.', 'gfspamrules' ),
 						'choices' => array(
 							array(
@@ -373,7 +382,7 @@ class GFSpamRules extends GFAddOn {
 						'label'   => esc_html__( 'Rate-Limit Submissions', 'gfspamrules' ),
 						'type'    => 'checkbox',
 						'name'    => 'rate_limit_submissions_title',
-						'description' => '<p>' . sprintf( esc_html__( 'Marks form submissions as spam if they exceed the rate limit from a single IP address.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Marks form submissions as spam if they exceed the rate limit from a single IP address.', 'gfspamrules' ) . '</p>',
 						'tooltip' => esc_html__( 'Enable this option to mark submissions as spam if more than three submissions are received from a single IP address within one minute, and continue to mark new entries from that IP address as spam for the following hour.', 'gfspamrules' ),
 						'choices' => array(
 							array(
@@ -401,6 +410,7 @@ class GFSpamRules extends GFAddOn {
 					array(
 						'label'   => esc_html__( 'Cloudflare API Token', 'gfspamrules' ),
 						'type'    => 'text',
+						'input_type' => 'password',
 						'name'    => 'cloudflare_api_token',
 						'class'   => 'medium',
 						'description' => '<p>' . esc_html__( 'Enter your Cloudflare API token (with Firewall Access Rules permissions).', 'gfspamrules' ) . '</p>',
@@ -433,7 +443,7 @@ class GFSpamRules extends GFAddOn {
 						'type'    => 'textarea',
 						'name'    => 'content_blacklist_add',
 						// translators: %1 is an opening <a> tag, and %2 is a closing </a> tag.
-						'description' => '<p>' . sprintf( esc_html__( 'Add additional words or phrases below (one per line) to customize the blacklist. Beware: partial matches count and they are not case-sensitive (E.g., "Rob" will blacklist "robert", "Robby", "JIM ROB", etc.).', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Add additional words or phrases below (one per line) to customize the blacklist. Beware: partial matches count and they are not case-sensitive (E.g., "Rob" will blacklist "robert", "Robby", "JIM ROB", etc.).', 'gfspamrules' ) . '</p>',
 						'class'   => 'medium',
 					),
 					array(
@@ -456,7 +466,7 @@ class GFSpamRules extends GFAddOn {
 						'type'    => 'textarea',
 						'name'    => 'email_blacklist_add',
 						// translators: %1 is an opening <a> tag, and %2 is a closing </a> tag.
-						'description' => '<p>' . sprintf( esc_html__( 'Add additional email addresses or domain names below (one per line) to customize the blacklist. Beware: partial matches count and they are not case-sensitive (E.g., "site.com" will blacklist all emails @ "mysite.com", "WEBSITE.com", etc.).', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Add additional email addresses or domain names below (one per line) to customize the blacklist. Beware: partial matches count and they are not case-sensitive (E.g., "site.com" will blacklist all emails @ "mysite.com", "WEBSITE.com", etc.).', 'gfspamrules' ) . '</p>',
 						'class'   => 'medium',
 					),
 					array(
@@ -464,7 +474,7 @@ class GFSpamRules extends GFAddOn {
 						'type'    => 'checkbox',
 						'name'    => 'name_blacklist_title',
 						// translators: %1 is an opening <a> tag, and %2 is a closing </a> tag.
-						'description' => '<p>' . sprintf( esc_html__( 'Mark form submissions as spam if the Last Name field contains the First Name (E.g., RobertGurge RobertGurgess), if either name field contains characters that should never be in a name (E.g., underscore, integer, etc), or if names are seven or more characters long but only contain one or no vowels. Also enables the ability to blacklist additional custom names.', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Mark form submissions as spam if the Last Name field contains the First Name (E.g., RobertGurge RobertGurgess), if either name field contains characters that should never be in a name (E.g., underscore, integer, etc), or if names are seven or more characters long but only contain one or no vowels. Also enables the ability to blacklist additional custom names.', 'gfspamrules' ) . '</p>',
 						'choices' => array(
 							array(
 								'label' => esc_html__( 'Enable', 'gfspamrules' ),
@@ -479,7 +489,7 @@ class GFSpamRules extends GFAddOn {
 						'type'    => 'textarea',
 						'name'    => 'name_blacklist_add',
 						// translators: %1 is an opening <a> tag, and %2 is a closing </a> tag.
-						'description' => '<p>' . sprintf( esc_html__( 'Add any First Name or Last Name you wish to blacklist (one per line). Beware: partial matches count and they are not case-sensitive (E.g., "Rob" will blacklist "robert", "Robby", "JIM ROB", etc.).', 'gfspamrules' ) ) . '</p>',
+						'description' => '<p>' . esc_html__( 'Add any First Name or Last Name you wish to blacklist (one per line). Beware: partial matches count and they are not case-sensitive (E.g., "Rob" will blacklist "robert", "Robby", "JIM ROB", etc.).', 'gfspamrules' ) . '</p>',
 						'class'   => 'medium',
 					),
 				)

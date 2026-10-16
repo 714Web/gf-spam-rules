@@ -2,8 +2,12 @@
 /*
  *
  * Core Functions
- * 
+ *
  */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 require_once __DIR__ . '/block-ip-cloudflare.php';
 
@@ -18,7 +22,11 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
      * @return string The spam message or the original confirmation.
      */
     public function custom_spam_confirmation( $confirmation, $form, $entry ) {
-        if ( empty( $entry ) || rgar( $entry, 'status' ) === 'spam' ) {
+        if ( empty( $entry ) ) {
+            return $confirmation;
+        }
+
+        if ( rgar( $entry, 'status' ) === 'spam' ) {
             return 'Your message has not been delivered because it was identified as spam.';
         }
 
@@ -362,7 +370,7 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
         $content_blacklist = parent::get_plugin_setting( 'content_blacklist' );
         $email_blacklist = parent::get_plugin_setting( 'email_blacklist' );
 
-        $url_components = $_SERVER['QUERY_STRING'];
+        $url_components = $_SERVER['QUERY_STRING'] ?? '';
         if ( empty($url_components) || !is_string($url_components) ) {
             return;
         }
@@ -382,6 +390,15 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
      * @return void
      */
     public function maybe_update_content_blacklist() {
+        // Rate-limit the remote check to once per hour - this is called on
+        // every form submission that has the content blacklist enabled, and
+        // without this a busy form would fetch the remote list on every
+        // single submission.
+        if ( false !== get_transient( 'sofw_comment_blacklist_checked' ) ) {
+            return;
+        }
+        set_transient( 'sofw_comment_blacklist_checked', 1, HOUR_IN_SECONDS );
+
         // Get comment blacklist
         $response = wp_remote_get(
             'https://raw.githubusercontent.com/splorp/wordpress-comment-blacklist/master/blacklist.txt'
@@ -394,7 +411,7 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
 
         // Get the etag
         $remote_etag = wp_remote_retrieve_header( $response, 'etag' );
-        $etag = preg_replace( '/^[a-f0-9"]$/', '', $remote_etag );
+        $etag = preg_replace( '/[^a-f0-9]/i', '', $remote_etag );
 
         // Compare etag to check for updated file
         if ( $etag == get_option('sofw_comment_blacklist_etag') && is_array( get_option( 'sofw_comment_blacklist') ) ) {
@@ -427,8 +444,8 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
         if ( $is_spam ) { return $is_spam; }
 
 		$settings = parent::get_plugin_settings( $form );
-        $content_blacklist = $settings['content_blacklist'];
-        $content_blacklist_add = $settings['content_blacklist_add'];
+        $content_blacklist = $settings['content_blacklist'] ?? '';
+        $content_blacklist_add = $settings['content_blacklist_add'] ?? '';
 
 		if ( empty($content_blacklist) ) {
             GFCommon::log_debug( __METHOD__ . '(): Option not set.' );
@@ -494,9 +511,11 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
             // }
             // GFCommon::log_debug( __METHOD__ . '(): preg_replace result: '. $str );
             
-            if( strlen( str_ireplace($blacklist_content, '', $value) ) !== strlen($value) ) {
-                GFCommon::log_debug( __METHOD__ . '(): Contains blacklisted content.' );
-                return true;
+            if ( ! is_array( $value ) ) {
+                if( strlen( str_ireplace($blacklist_content, '', $value) ) !== strlen($value) ) {
+                    GFCommon::log_debug( __METHOD__ . '(): Contains blacklisted content.' );
+                    return true;
+                }
             }
         }
 
@@ -510,6 +529,13 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
      * @return void
      */
     public function maybe_update_email_blacklist() {
+        // Rate-limit the remote check to once per hour - see
+        // maybe_update_content_blacklist() for why.
+        if ( false !== get_transient( 'sofw_email_blacklist_checked' ) ) {
+            return;
+        }
+        set_transient( 'sofw_email_blacklist_checked', 1, HOUR_IN_SECONDS );
+
         // Get comment blacklist
         $response = wp_remote_get(
             'https://raw.githubusercontent.com/matomo-org/referrer-spam-list/master/spammers.txt'
@@ -522,7 +548,7 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
 
         // Get the etag
         $remote_etag = wp_remote_retrieve_header( $response, 'etag' );
-        $etag = preg_replace( '/^[a-f0-9"]$/', '', $remote_etag );
+        $etag = preg_replace( '/[^a-f0-9]/i', '', $remote_etag );
 
         // Compare etag to check for updated file
         if ( $etag == get_option('sofw_email_blacklist_etag') && is_array( get_option( 'sofw_email_blacklist') ) ) {
@@ -555,8 +581,8 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
         if ( $is_spam ) { return $is_spam; }
 
 		$settings = parent::get_plugin_settings( $form );
-        $email_blacklist = $settings['email_blacklist'];
-        $custom_email_add = $settings['email_blacklist_add'];
+        $email_blacklist = $settings['email_blacklist'] ?? '';
+        $custom_email_add = $settings['email_blacklist_add'] ?? '';
 
 		if ( empty($email_blacklist) ) {
             GFCommon::log_debug( __METHOD__ . '(): Option not set.' );
@@ -567,8 +593,11 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
         
         // Get remote blacklist
         $this->maybe_update_email_blacklist();
-        $email_blacklist = get_option('sofw_email_blacklist');
-        
+        $email_blacklist = get_option('sofw_email_blacklist', array());
+        if ( ! is_array( $email_blacklist ) ) {
+            $email_blacklist = array();
+        }
+
         // Get custom blacklist content w/o triggering error if db table !exist
         $custom_content = array();
         if ( !empty($custom_email_add) ) {
@@ -598,9 +627,11 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
             }
 
             GFCommon::log_debug( __METHOD__ . '(): Checking field id '.$field->id.'.' );
-            if( strlen( str_replace($email_blacklist, '', $value) ) !== strlen($value) ) {
-                GFCommon::log_debug( __METHOD__ . '(): Email is blacklisted.' );
-                return true;
+            if ( ! is_array( $value ) ) {
+                if( strlen( str_replace($email_blacklist, '', $value) ) !== strlen($value) ) {
+                    GFCommon::log_debug( __METHOD__ . '(): Email is blacklisted.' );
+                    return true;
+                }
             }
         }
 
@@ -619,15 +650,12 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
     public function sofw_gform_name_spam( $is_spam, $form, $entry ) {
         if ( $is_spam ) { return $is_spam; }
 
-        $name_blacklist = array();
         $settings = parent::get_plugin_settings( $form );
-        if (!empty($settings['name_blacklist'])) {
-            if (is_array($settings['name_blacklist'])) {
-                $name_blacklist = array_merge($name_blacklist, $settings['name_blacklist']);
-            } else {
-                $name_blacklist[] = $settings['name_blacklist'];
-            }
+        if ( empty( $settings['name_blacklist'] ) ) {
+            return $is_spam;
         }
+
+        $name_blacklist = array();
         if (!empty($settings['name_blacklist_add'])) {
             $name_blacklist = array_merge($name_blacklist, explode("\r\n", $settings['name_blacklist_add']));
         }
@@ -648,7 +676,7 @@ class GFSpamRulesCoreFunctions extends GFSpamRules {
             GFCommon::log_debug( __METHOD__ . '(): Checking field id '.$field->id.'.' );
             $first  = rgar( $entry, $field->id . '.3' );
             $last   = rgar( $entry, $field->id . '.6' );
-            if ( str_contains($last, $first) ) {
+            if ( $first !== '' && str_contains($last, $first) ) {
                 GFCommon::log_debug( __METHOD__ . '(): Last Name contains First Name.' );
                 return true;
             }
